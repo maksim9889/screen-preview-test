@@ -1,0 +1,1049 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Home Screen Editor API",
+    "version": "1.0.0",
+    "description": "REST API for managing home screen configurations with versioning, import/export, and multi-config support",
+    "contact": {
+      "name": "API Support",
+      "url": "https://github.com/anthropics/home-screen-editor"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5175",
+      "description": "Development server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "User authentication and session management"
+    },
+    {
+      "name": "Configuration",
+      "description": "Configuration management operations"
+    },
+    {
+      "name": "Versioning",
+      "description": "Configuration version control"
+    },
+    {
+      "name": "Import/Export",
+      "description": "Configuration import and export"
+    }
+  ],
+  "paths": {
+    "/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "User login",
+        "description": "Authenticate user and create session",
+        "operationId": "login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "password",
+                  "csrf_token"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "description": "Username",
+                    "example": "admin"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "description": "Password",
+                    "minLength": 8
+                  },
+                  "csrf_token": {
+                    "type": "string",
+                    "description": "CSRF protection token"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "302": {
+            "description": "Login successful, redirecting to last viewed configuration",
+            "headers": {
+              "Set-Cookie": {
+                "description": "Authentication token cookie",
+                "schema": {
+                  "type": "string",
+                  "example": "auth_token=abc123; HttpOnly; Secure; SameSite=Strict"
+                }
+              },
+              "Location": {
+                "description": "Redirect URL to user's last configuration",
+                "schema": {
+                  "type": "string",
+                  "example": "/?config=mobile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "rateLimitExceeded": {
+                    "summary": "Rate limit exceeded",
+                    "value": {
+                      "error": "Too many login attempts. Please try again in 60 seconds.",
+                      "code": "VALIDATION_ERROR"
+                    }
+                  },
+                  "invalidCredentials": {
+                    "summary": "Invalid credentials",
+                    "value": {
+                      "error": "Invalid username or password",
+                      "code": "UNAUTHORIZED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF token validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request payload too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/setup": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Initial setup",
+        "description": "Create the first admin user (only available when no users exist)",
+        "operationId": "setup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "password",
+                  "confirmPassword",
+                  "csrf_token"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "description": "Admin username",
+                    "minLength": 3,
+                    "example": "admin"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "description": "Admin password",
+                    "minLength": 8
+                  },
+                  "confirmPassword": {
+                    "type": "string",
+                    "format": "password",
+                    "description": "Password confirmation",
+                    "minLength": 8
+                  },
+                  "csrf_token": {
+                    "type": "string",
+                    "description": "CSRF protection token"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "302": {
+            "description": "Setup successful, user created and logged in",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Location": {
+                "schema": {
+                  "type": "string",
+                  "example": "/"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF token validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Setup already completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "Load configuration",
+        "description": "Load a specific configuration or the user's last viewed configuration",
+        "operationId": "loadConfig",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "config",
+            "in": "query",
+            "description": "Configuration ID to load",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,50}$",
+              "example": "mobile"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuration loaded successfully",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "description": "HTML page with embedded configuration data"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "username": {
+                      "type": "string"
+                    },
+                    "configId": {
+                      "type": "string"
+                    },
+                    "config": {
+                      "$ref": "#/components/schemas/AppConfig"
+                    },
+                    "csrfToken": {
+                      "type": "string"
+                    },
+                    "versions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ConfigVersion"
+                      }
+                    },
+                    "latestVersionNumber": {
+                      "type": "integer"
+                    },
+                    "allConfigs": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ConfigListItem"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Redirecting to login or default config"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Configuration",
+          "Versioning",
+          "Import/Export"
+        ],
+        "summary": "Configuration actions",
+        "description": "Execute various configuration operations based on intent",
+        "operationId": "configAction",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/SaveConfigRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SaveVersionRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SaveAsNewConfigRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ImportConfigRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ExportConfigRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RestoreVersionRequest"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "intent",
+                  "mapping": {
+                    "save": "#/components/schemas/SaveConfigRequest",
+                    "saveVersion": "#/components/schemas/SaveVersionRequest",
+                    "saveAsNewConfig": "#/components/schemas/SaveAsNewConfigRequest",
+                    "import": "#/components/schemas/ImportConfigRequest",
+                    "export": "#/components/schemas/ExportConfigRequest",
+                    "restoreVersion": "#/components/schemas/RestoreVersionRequest"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Action successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SaveConfigResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SaveVersionResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SaveAsNewConfigResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ImportConfigResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RestoreVersionResponse"
+                    }
+                  ]
+                }
+              },
+              "application/octet-stream": {
+                "description": "Export file download",
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "invalidConfigId": {
+                    "summary": "Invalid configuration ID",
+                    "value": {
+                      "error": "Configuration ID must contain only letters, numbers, hyphens, and underscores (1-50 characters)",
+                      "code": "INVALID_CONFIG_ID"
+                    }
+                  },
+                  "validationError": {
+                    "summary": "Configuration validation failed",
+                    "value": {
+                      "error": "Title color must be a valid hex color (e.g., #000000)",
+                      "code": "VALIDATION_ERROR"
+                    }
+                  },
+                  "invalidSchemaVersion": {
+                    "summary": "Schema version too old",
+                    "value": {
+                      "error": "Schema version 0 is too old. Minimum supported version is 1",
+                      "code": "VALIDATION_ERROR"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF token validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Configuration or version not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request payload too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "auth_token",
+        "description": "Authentication cookie set during login"
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "error",
+          "code"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable error message",
+            "example": "Configuration not found"
+          },
+          "code": {
+            "type": "string",
+            "description": "Machine-readable error code",
+            "enum": [
+              "UNAUTHORIZED",
+              "INVALID_TOKEN",
+              "SESSION_EXPIRED",
+              "FORBIDDEN",
+              "INVALID_CSRF",
+              "VALIDATION_ERROR",
+              "INVALID_CONFIG_ID",
+              "INVALID_CONFIG_DATA",
+              "INVALID_VERSION_NUMBER",
+              "INVALID_IMPORT_FILE",
+              "MISSING_FIELD",
+              "CONFIG_NOT_FOUND",
+              "VERSION_NOT_FOUND",
+              "USER_NOT_FOUND",
+              "CONFIG_ALREADY_EXISTS",
+              "USERNAME_TAKEN",
+              "PAYLOAD_TOO_LARGE",
+              "INTERNAL_ERROR",
+              "UNKNOWN_ACTION"
+            ],
+            "example": "CONFIG_NOT_FOUND"
+          },
+          "details": {
+            "type": "string",
+            "description": "Optional additional details about the error",
+            "example": "Config ID 'nonexistent' does not exist for user"
+          }
+        }
+      },
+      "AppConfig": {
+        "type": "object",
+        "required": [
+          "carousel",
+          "textSection",
+          "cta"
+        ],
+        "properties": {
+          "carousel": {
+            "type": "object",
+            "required": [
+              "images",
+              "aspectRatio"
+            ],
+            "properties": {
+              "images": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uri",
+                  "example": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800"
+                },
+                "minItems": 1,
+                "description": "Array of image URLs"
+              },
+              "aspectRatio": {
+                "type": "string",
+                "enum": [
+                  "portrait",
+                  "landscape",
+                  "square"
+                ],
+                "description": "Image aspect ratio"
+              }
+            }
+          },
+          "textSection": {
+            "type": "object",
+            "required": [
+              "title",
+              "titleColor",
+              "description",
+              "descriptionColor"
+            ],
+            "properties": {
+              "title": {
+                "type": "string",
+                "example": "Welcome to Our App"
+              },
+              "titleColor": {
+                "type": "string",
+                "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$",
+                "example": "#000000",
+                "description": "Hex color code"
+              },
+              "description": {
+                "type": "string",
+                "example": "Discover amazing features and start your journey with us today."
+              },
+              "descriptionColor": {
+                "type": "string",
+                "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$",
+                "example": "#666666",
+                "description": "Hex color code"
+              }
+            }
+          },
+          "cta": {
+            "type": "object",
+            "required": [
+              "label",
+              "url",
+              "backgroundColor",
+              "textColor"
+            ],
+            "properties": {
+              "label": {
+                "type": "string",
+                "example": "Get Started"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "example": "https://example.com"
+              },
+              "backgroundColor": {
+                "type": "string",
+                "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$",
+                "example": "#007AFF",
+                "description": "Hex color code"
+              },
+              "textColor": {
+                "type": "string",
+                "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$",
+                "example": "#FFFFFF",
+                "description": "Hex color code"
+              }
+            }
+          }
+        }
+      },
+      "ConfigVersion": {
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "createdAt",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Version record ID"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Version number",
+            "example": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp",
+            "example": "2026-01-31T12:00:00.000Z"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AppConfig"
+          }
+        }
+      },
+      "ConfigListItem": {
+        "type": "object",
+        "required": [
+          "config_id",
+          "updatedAt",
+          "versionCount"
+        ],
+        "properties": {
+          "config_id": {
+            "type": "string",
+            "example": "mobile"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-01-31T12:00:00.000Z"
+          },
+          "versionCount": {
+            "type": "integer",
+            "description": "Number of saved versions",
+            "example": 3
+          }
+        }
+      },
+      "SaveConfigRequest": {
+        "type": "object",
+        "required": [
+          "intent",
+          "config",
+          "currentConfigId",
+          "csrf_token"
+        ],
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": [
+              "save"
+            ]
+          },
+          "config": {
+            "type": "string",
+            "description": "JSON-stringified AppConfig"
+          },
+          "currentConfigId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,50}$",
+            "example": "mobile"
+          },
+          "csrf_token": {
+            "type": "string"
+          }
+        }
+      },
+      "SaveVersionRequest": {
+        "type": "object",
+        "required": [
+          "intent",
+          "config",
+          "currentConfigId",
+          "csrf_token"
+        ],
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": [
+              "saveVersion"
+            ]
+          },
+          "config": {
+            "type": "string",
+            "description": "JSON-stringified AppConfig"
+          },
+          "currentConfigId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,50}$"
+          },
+          "csrf_token": {
+            "type": "string"
+          }
+        }
+      },
+      "SaveAsNewConfigRequest": {
+        "type": "object",
+        "required": [
+          "intent",
+          "config",
+          "newConfigId",
+          "csrf_token"
+        ],
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": [
+              "saveAsNewConfig"
+            ]
+          },
+          "config": {
+            "type": "string",
+            "description": "JSON-stringified AppConfig"
+          },
+          "newConfigId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,50}$",
+            "example": "tablet"
+          },
+          "csrf_token": {
+            "type": "string"
+          }
+        }
+      },
+      "ImportConfigRequest": {
+        "type": "object",
+        "required": [
+          "intent",
+          "importData",
+          "csrf_token"
+        ],
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": [
+              "import"
+            ]
+          },
+          "importData": {
+            "type": "string",
+            "description": "JSON-stringified configuration export"
+          },
+          "csrf_token": {
+            "type": "string"
+          }
+        }
+      },
+      "ExportConfigRequest": {
+        "type": "object",
+        "required": [
+          "intent",
+          "currentConfigId",
+          "csrf_token"
+        ],
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": [
+              "export"
+            ]
+          },
+          "currentConfigId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,50}$"
+          },
+          "csrf_token": {
+            "type": "string"
+          }
+        }
+      },
+      "RestoreVersionRequest": {
+        "type": "object",
+        "required": [
+          "intent",
+          "version",
+          "currentConfigId",
+          "csrf_token"
+        ],
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": [
+              "restoreVersion"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "description": "Version number as string",
+            "example": "1"
+          },
+          "currentConfigId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,50}$"
+          },
+          "csrf_token": {
+            "type": "string"
+          }
+        }
+      },
+      "SaveConfigResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "savedAt"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "savedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-01-31T12:00:00.000Z"
+          }
+        }
+      },
+      "SaveVersionResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "savedAt",
+          "versionCreated",
+          "versionNumber",
+          "versions",
+          "latestVersionNumber"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "savedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "versionCreated": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "versionNumber": {
+            "type": "integer",
+            "example": 2
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigVersion"
+            }
+          },
+          "latestVersionNumber": {
+            "type": "integer",
+            "example": 2
+          }
+        }
+      },
+      "SaveAsNewConfigResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "savedAt",
+          "configCreated",
+          "versionCreated",
+          "versionNumber",
+          "configId",
+          "versions",
+          "latestVersionNumber"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "savedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "configCreated": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "versionCreated": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "versionNumber": {
+            "type": "integer",
+            "example": 1
+          },
+          "configId": {
+            "type": "string",
+            "example": "tablet"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigVersion"
+            }
+          },
+          "latestVersionNumber": {
+            "type": "integer",
+            "example": 1
+          }
+        }
+      },
+      "ImportConfigResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "imported",
+          "importedAt",
+          "config"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "imported": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "importedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "config": {
+            "$ref": "#/components/schemas/AppConfig"
+          }
+        }
+      },
+      "RestoreVersionResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "restored",
+          "restoredVersion",
+          "config"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "restored": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "restoredVersion": {
+            "type": "integer",
+            "example": 1
+          },
+          "config": {
+            "$ref": "#/components/schemas/AppConfig"
+          }
+        }
+      }
+    }
+  }
+}
