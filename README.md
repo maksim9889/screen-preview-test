@@ -1055,6 +1055,8 @@ npm run dev
 
 Your application will be available at `http://localhost:5173`.
 
+**Tip:** If you encounter stale UI or caching issues during development, do a full page refresh with `Ctrl+Shift+R` (or `Cmd+Shift+R` on macOS).
+
 ## Testing
 
 This project has a comprehensive test suite covering all major functionality.
