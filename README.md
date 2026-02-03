@@ -21,7 +21,7 @@ A full-stack web application that allows users to preview and modify a mobile ap
 - ⏱️ Rate limiting (login attempts + API requests)
 - 📏 Request size limits (DoS protection)
 - 📝 Structured JSON logging (Pino)
-- ✅ Comprehensive test suite (577+ tests)
+- ✅ Comprehensive test suite (630+ tests)
 - 🎨 Responsive UI with TailwindCSS
 
 ## Architecture Overview
@@ -596,12 +596,6 @@ The schema is embedded in the application code, not in separate migration files,
 - Single SQLite file = simple deployment
 - Schema is stable (not frequently changing)
 - Automatic migrations on startup = zero manual steps
-
-**Migration Note:**
-If you're upgrading from a session-based version, run:
-```bash
-npx tsx migrate-to-tokens.ts
-```
 
 ### API Data Validation
 

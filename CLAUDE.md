@@ -20,7 +20,7 @@ npm run typecheck        # TypeScript type checking + React Router type generati
 ## Testing Commands
 
 ```bash
-npm test                 # Run all tests once (577+ tests)
+npm test                 # Run all tests once (630+ tests)
 npm run test:watch       # Watch mode for development
 npm run test:ui          # Interactive Vitest UI
 npm run test:coverage    # Generate coverage reports
